@@ -11,3 +11,4 @@ qemu_old/
 *.img
 kernel
 initrd
+.DS_Store
