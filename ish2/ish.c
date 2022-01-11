@@ -5,6 +5,7 @@
     #include <sys/stat.h>
     #include <sys/wait.h>
     #include <sys/types.h>
+#include <stdio.h>
 #endif
 
 #include "ish_cstring_utilities.h"
@@ -97,7 +98,11 @@ int main(int argc, char **argv, char **envp)
                 //       to the `next_input` label to ignore the incorrect
                 //       command. The `cd` command does not make much sense in
                 //       our shell in a pipe sequence.
-                // ?
+                // ? DONE
+
+		    if (is_pipe) {
+			    goto next_input;
+		    }
 
                 char *directory = argument_count == 0 ?  home : arguments[1];
                 if (directory) {
@@ -115,7 +120,11 @@ int main(int argc, char **argv, char **envp)
                 //       to the `next_input` label to ignore the incorrect
                 //       command. The `exit` command does not make much sense in
                 //       our shell in a pipe sequence.
-                // ?
+                // ? DONE
+		
+		    if (is_pipe) {
+			    goto next_input;
+		    }
 
                 int exit_status =
                     argument_count == 0 ?
@@ -180,7 +189,12 @@ int main(int argc, char **argv, char **envp)
             //       ignore the incorrect command. The only program in a pipe
             //       that can use STDIN redirection from a file should be the
             //       first program in a pipeline.
-            // ?
+            // ? DONE
+	    if (is_pipe && stdin_file) {
+		    if (pipe_member_index != 0) {
+		    	goto next_input;
+		    }
+	    }
 
             int stdin_descriptor =
                 !stdin_file ?
@@ -199,7 +213,13 @@ int main(int argc, char **argv, char **envp)
             //       `next_input` label to ignore the incorrect command. The
             //       only program in a pipe that can use STDOUT redirection to
             //       a file should be the last program in a pipeline.
-            // ?
+            // ? DONE
+
+	    if (is_pipe && stdout_file) {
+		    if (pipe_member_index != pipe_member_count -1) {
+			    goto next_input;
+		    }
+	    }
 
             int stdout_descriptor =
                 !stdout_file ?
@@ -218,13 +238,13 @@ int main(int argc, char **argv, char **envp)
                     //       process (the second process) and `pipe_descriptors[1]`
                     //       is the STDOUT end of the producer process (the
                     //       first process).
-                    // ?
+                    // ? DONE
 
-                    pipe_stdin_descriptors[pipe_member_index] =
-                        pipe_descriptors[0];
-                    pipe_stdout_descriptors[pipe_member_index] =
-                        pipe_descriptors[1];
-                }
+		    pipe(pipe_descriptors);
+		    pipe_stdin_descriptors[pipe_member_index] = pipe_descriptors[0];
+		    pipe_stdout_descriptors[pipe_member_index] = pipe_descriptors[1];
+
+		}
             }
 
             int pid = fork();
@@ -248,7 +268,11 @@ int main(int argc, char **argv, char **envp)
                         //       correct index to the `pipe_stdin_descriptors`
                         //       array here for `dup2` to replace the file
                         //       descriptor 0 of STDIN.
-                        // ?
+                        // ? DONE
+
+			    dup2(pipe_stdin_descriptors[pipe_member_index - 1], 0);
+
+
 
                         // TODO: You can close the pipe's file descriptors after
                         //       duplicating them onto the standard streams. You
@@ -258,7 +282,11 @@ int main(int argc, char **argv, char **envp)
                         //       `pipe_stdin_descriptors` and
                         //       `pipe_stdout_descriptors` for the correct
                         //       index.
-                        // ?
+                        // ? DONE
+
+			    close(pipe_stdin_descriptors[pipe_member_index - 1]);
+			    close(pipe_stdout_descriptors[pipe_member_index - 1]);
+
 
                     }
 
@@ -270,7 +298,10 @@ int main(int argc, char **argv, char **envp)
                         //       correct index to the `pipe_stdout_descriptors`
                         //       array here for `dup2` to replace the file
                         //       descriptor 1 of STDOUT.
-                        // ?
+                        // ? DONE
+			    
+			    dup2(pipe_stdout_descriptors[pipe_member_index], 1);
+
 
                         // TODO: You can close the pipe's file descriptors after
                         //       duplicating them onto the standard streams. You
@@ -280,8 +311,10 @@ int main(int argc, char **argv, char **envp)
                         //       `pipe_stdin_descriptors` and
                         //       `pipe_stdout_descriptors` for the correct
                         //       index.
-                        // ?
+                        // ? DONE
 
+			    close(pipe_stdin_descriptors[pipe_member_index]);
+			    close(pipe_stdout_descriptors[pipe_member_index]);
                     }
                 }
 
@@ -307,8 +340,10 @@ int main(int argc, char **argv, char **envp)
                         //       `write` system calls to exit (that is how the
                         //       `yes` program exits from the infinite loop by
                         //       failing to do a `write` call).
-                        // ?
+                        // ? DONE
 
+			    close(pipe_stdin_descriptors[pipe_member_index - 1]);
+			    close(pipe_stdout_descriptors[pipe_member_index - 1]);
                     }
                 }
             } else {
@@ -324,7 +359,10 @@ int main(int argc, char **argv, char **envp)
             //       the last pipe descriptors. They should be at index
             //       `pipe_member_count - 2` in `pipe_stdin_descriptors` and
             //       `pipe_stdout_descriptors` arrays.
-            // ?
+            // ? DONE
+	    
+		close(pipe_stdin_descriptors[pipe_member_count - 2]);
+		close(pipe_stdout_descriptors[pipe_member_count - 2]);
 
         }
 
@@ -333,8 +371,13 @@ int main(int argc, char **argv, char **envp)
         //       in a loop for all the pipe member indices for every positive
         //       process ID in the `pids` array (as we may have more than one
         //       process this time).
-        // ?
+        // ? DONE
+	
+	int wstatus;
 
+	for (int i = 0; i < pipe_member_count; ++i) {
+		waitpid(pids[i], &wstatus, -1);
+	}
 next_input:;
     }
 
